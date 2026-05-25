@@ -9,7 +9,7 @@ from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import RBF, ConstantKernel as C, WhiteKernel
 import numpy as np
 import pandas as pd
-
+from sklearn.metrics import r2_score
 # Importaciones de la arquitectura de Inteligencia Artificial (CORRECCIÓN INTEGRADA)
 from src.model import construir_modelo_lstm
 from tensorflow.keras.callbacks import EarlyStopping
@@ -145,7 +145,15 @@ def entrenar_ia():
         # Desnormalización de GPR Viento a m/s
         preds_gpr_viento_real = [(float(x) * range_val[3]) + min_val[3] for x in preds_gpr_viento_norm]
         std_gpr_viento_real = [float(x) * range_val[3] for x in std_gpr_viento_norm]
-        
+
+        # Generar predicciones de entrenamiento para evaluar el R²
+        preds_train_ghi = modelo_ghi.predict(X_train, verbose=0)
+        r2_ghi_train = float(r2_score(Y_train_ghi, preds_train_ghi))
+
+        # Generar predicciones de entrenamiento para evaluar el R² de viento
+        preds_train_viento = modelo_viento.predict(X_train, verbose=0)
+        r2_viento_train = float(r2_score(Y_train_viento, preds_train_viento))
+
         # 6. Estructura JSON final
         return jsonify({
             "status": "success",
@@ -156,6 +164,7 @@ def entrenar_ia():
             "pasado_reciente": ultimos_7_dias_norm,
             "lstm": {
                 "mse_train": float(loss_history_ghi[-1]),
+                "r2_train": r2_ghi_train,
                 "loss_history": loss_history_ghi,
                 "val_loss_history": val_loss_history_ghi,
                 "forecast": preds_futuras_ghi,
@@ -163,6 +172,7 @@ def entrenar_ia():
             },
             "lstm_viento": {
                 "mse_train": float(loss_history_viento[-1]),
+                "r2_train": r2_viento_train,
                 "loss_history": loss_history_viento,
                 "val_loss_history": val_loss_history_viento,
                 "forecast_norm": preds_futuras_viento,
