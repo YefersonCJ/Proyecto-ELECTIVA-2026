@@ -12,13 +12,11 @@ def limpiar_y_normalizar(df):
     df_norm = (df - df.min()) / rango
     return df_norm.fillna(0)
 
-def crear_secuencias(data, pasos=30):
+def crear_secuencias(datos, pasos=30, horizonte=7):
     X, y = [], []
-    for i in range(len(data) - pasos):
-        X.append(data[i : i + pasos, :])
-        y.append(data[i + pasos, 0]) 
-        
-    # Conversión explícita a float32 para el motor de TensorFlow
-    return np.array(X, dtype=np.float32), np.array(y, dtype=np.float32)
-        
+    for i in range(len(datos) - pasos - horizonte + 1):
+        X.append(datos[i:(i + pasos), :])
+        # Índice 0 asume que GHI es la primera columna. Retorna 7 días futuros.
+        y.append(datos[(i + pasos):(i + pasos + horizonte), 0])
+    return np.array(X), np.array(y)
     

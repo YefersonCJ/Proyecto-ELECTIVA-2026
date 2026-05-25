@@ -1,24 +1,33 @@
-import requests
 import pandas as pd
+import requests
 from datetime import datetime, timedelta
 
 def extraer_datos_nasa(lat, lon, dias_atras=7200):
-    fecha_fin = datetime.now()
-    fecha_ini = fecha_fin - timedelta(days=dias_atras)
-    
-    fmt = "%Y%m%d"
-    url = (f"https://power.larc.nasa.gov/api/temporal/daily/point?"
-           f"parameters=ALLSKY_SFC_SW_DWN,WS10M,T2M,RH2M&community=RE&"
-           f"longitude={lon}&latitude={lat}&"
-           f"start={fecha_ini.strftime(fmt)}&end={fecha_fin.strftime(fmt)}&format=JSON")
-    
-    try:
-        response = requests.get(url, timeout=30)
-        data = response.json()
-        df = pd.DataFrame(data['properties']['parameter'])
-        df.index = pd.to_datetime(df.index, format='%Y%m%d')
-        df.columns = ['GHI', 'Viento', 'Temp', 'Humedad']
-        return df
-    except Exception as e:
-        print(f"Error en extracción: {e}")
+    # Truncación sistémica: T-7 días para evadir latencia de asimilación (-999)
+    fecha_fin = datetime.now() - timedelta(days=7)
+    fecha_inicio = fecha_fin - timedelta(days=dias_atras)
+
+    inicio_str = fecha_inicio.strftime('%Y%m%d')
+    fin_str = fecha_fin.strftime('%Y%m%d')
+
+    url = f"https://power.larc.nasa.gov/api/temporal/daily/point?parameters=ALLSKY_SFC_SW_DWN,WS10M,T2M,RH2M&community=RE&longitude={lon}&latitude={lat}&start={inicio_str}&end={fin_str}&format=JSON"
+
+    response = requests.get(url)
+    if response.status_code != 200:
         return None
+
+    data = response.json()
+    if 'properties' not in data:
+        return None
+
+    df = pd.DataFrame(data['properties']['parameter'])
+    
+    df = df.rename(columns={
+        'ALLSKY_SFC_SW_DWN': 'GHI',
+        'WS10M': 'Viento',
+        'T2M': 'Temp',
+        'RH2M': 'Humedad'
+    })
+    
+    df.index = pd.to_datetime(df.index, format='%Y%m%d')
+    return df

@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Dashboard Analítico: Red Neuronal LSTM y GPR</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <style>
+        body {
+            font-family: system-ui, sans-serif;
+            padding: 20px;
+            background: #f0f2f5;
+            color: #1a202c;
+            line-height: 1.5;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .section-title {
+            background: #2d3748;
+            color: white;
+            padding: 15px;
+            border-radius: 8px 8px 0 0;
+            margin-top: 30px;
+        }
+
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 0 0 8px 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+            margin-bottom: 20px;
+        }
+
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .kpi-card {
+            background: #f7fafc;
+            border: 1px solid #e2e8f0;
+            padding: 15px;
+            border-radius: 6px;
+            text-align: center;
+        }
+
+        .kpi-card h4 {
+            margin: 0;
+            color: #4a5568;
+            font-size: 14px;
+            text-transform: uppercase;
+        }
+
+        .kpi-card .value {
+            font-size: 20px;
+            font-weight: bold;
+            color: #2b6cb0;
+            margin-top: 5px;
+        }
+
+        .value.viento {
+            color: #38a169;
+        }
+
+        .chart-row {
+            display: flex;
+            gap: 20px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+
+        .chart-box {
+            flex: 1;
+            min-width: 450px;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 350px;
+            width: 100%;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background: white;
+        }
+
+        th,
+        td {
+            border: 1px solid #e2e8f0;
+            padding: 12px;
+            text-align: center;
+        }
+
+        th {
+            background: #edf2f7;
+            font-weight: bold;
+        }
+    </style>
+    <!-- <style>
+        /* Estilos para el botón de descarga */
+        .btn-container {
+            text-align: right;
+            margin-bottom: 20px;
+        }
+
+        .btn-pdf {
+            background: #e53e3e;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .btn-pdf:hover {
+            background: #c53030;
+        }
+
+        /* Directivas de control de página para el PDF */
+        .page-break {
+            page-break-before: always;
+        }
+
+        @media print {
+            .btn-container {
+                display: none;
+            }
+
+            body {
+                background: white;
+                padding: 0;
+            }
+
+            .card {
+                box-shadow: none;
+                border: 1px solid #e2e8f0;
+            }
+        }
+    </style> -->
+</head>
+
+<body>
+
+    <div class="container">
+        <h1 style="text-align: center;">Evaluación del Modelo Predictivo: Red LSTM Dinámica y GPR</h1>
+
+        <h2 class="section-title">1. Optimización y Pérdida de la Arquitectura LSTM</h2>
+        <div class="card">
+            <div class="chart-row">
+                <div class="chart-box">
+                    <h4 style="text-align: center;">Curvas de Pérdida - Modelo Solar (GHI)</h4>
+                    <div class="chart-container"><canvas id="chart-loss-lstm"></canvas></div>
+                </div>
+                <div class="chart-box">
+                    <h4 style="text-align: center;">Curvas de Pérdida - Modelo Eólico (Viento)</h4>
+                    <div class="chart-container"><canvas id="chart-loss-viento"></canvas></div>
+                </div>
+            </div>
+        </div>
+
+        <h2 class="section-title">2. Pronóstico e Inferencia de Radiación Solar (GHI)</h2>
+        <div class="card">
+            <div class="kpi-grid">
+                <div class="kpi-card">
+                    <h4>MSE Train GHI</h4>
+                    <div class="value" id="lstm-mse">--</div>
+                </div>
+                <div class="kpi-card">
+                    <h4>PREDICCIÓN DÍA +1</h4>
+                    <div class="value" id="lstm-pred">--</div>
+                </div>
+                <div class="kpi-card">
+                    <h4>PREDICCIÓN DÍA +7</h4>
+                    <div class="value" id="lstm-acc">--</div>
+                </div>
+            </div>
+            <div class="chart-container"><canvas id="chart-pred-lstm"></canvas></div>
+        </div>
+
+        <h2 class="section-title">3. Pronóstico e Inferencia de Velocidad del Viento</h2>
+        <div class="card">
+            <div class="kpi-grid">
+                <div class="kpi-card">
+                    <h4>MSE Train Viento</h4>
+                    <div class="value viento" id="viento-mse">--</div>
+                </div>
+                <div class="kpi-card">
+                    <h4>PRED DÍA +1 (m/s)</h4>
+                    <div class="value viento" id="viento-pred">--</div>
+                </div>
+                <div class="kpi-card">
+                    <h4>PRED DÍA +7 (m/s)</h4>
+                    <div class="value viento" id="viento-acc">--</div>
+                </div>
+            </div>
+            <div class="chart-container"><canvas id="chart-pred-viento"></canvas></div>
+        </div>
+
+        <h2 class="section-title">4. Síntesis General de Modelos LSTM Ejecutados</h2>
+        <div class="card">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Variable Física Objetivo</th>
+                        <th>Error Cuadrático Medio (Train MSE)</th>
+                        <th>Horizonte Predictivo</th>
+                        <th>Tipo de Salida de Red</th>
+                    </tr>
+                </thead>
+                <tbody id="tabla-body"></tbody>
+            </table>
+        </div>
+
+        <h2 class="section-title">5. Desglose Numérico de Pronósticos Estrictos (7 Días)</h2>
+        <div class="card">
+            <p style="text-align: center; color: #4a5568; margin-bottom: 15px;">
+                El margen de error proyectado es dinámico y progresivo, calculado en el servidor mediante la técnica
+                estocástica Monte Carlo Dropout (100 iteraciones).
+            </p>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Horizonte Temporal</th>
+                        <th>Predicción GHI (Norm)</th>
+                        <th>Margen Error GHI (&plusmn;)</th>
+                        <th>Incertidumbre GHI (%)</th>
+                        <th>Predicción Viento (m/s)</th>
+                        <th>Margen Error Viento (&plusmn;)</th>
+                        <th>Incertidumbre Viento (%)</th>
+                    </tr>
+                </thead>
+                <tbody id="tabla-diaria-body"></tbody>
+            </table>
+        </div>
+
+        <h2 class="section-title">6. Regresión de Procesos Gaussianos (GPR) - Modelo Alterno GHI</h2>
+        <div class="card">
+            <p style="text-align: center; color: #4a5568; margin-bottom: 15px;">
+                Inferencia no paramétrica basada en funciones de covarianza. Muestra bandas de confianza continuas
+                extraídas matemáticamente de la varianza condicional.
+            </p>
+            <div class="kpi-grid">
+                <div class="kpi-card">
+                    <h4>Coeficiente de Determinación (R²)</h4>
+                    <div class="value" id="gpr-score">--</div>
+                </div>
+                <div class="kpi-card">
+                    <h4>PREDICCIÓN GPR DÍA +1</h4>
+                    <div class="value" id="gpr-pred">--</div>
+                </div>
+                <div class="kpi-card">
+                    <h4>PREDICCIÓN GPR DÍA +7</h4>
+                    <div class="value" id="gpr-acc">--</div>
+                </div>
+            </div>
+            <div class="chart-container"><canvas id="chart-pred-gpr"></canvas></div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Horizonte Temporal</th>
+                        <th>Predicción GPR (GHI Norm)</th>
+                        <th>Margen Error (±)</th>
+                        <th>Incertidumbre (%)</th>
+                    </tr>
+                </thead>
+                <tbody id="tabla-gpr-body"></tbody>
+            </table>
+        </div>
+
+        <h2 class="section-title">7. Regresión de Procesos Gaussianos (GPR) - Modelo Alterno Viento</h2>
+        <div class="card">
+            <p style="text-align: center; color: #4a5568; margin-bottom: 15px;">
+                Inferencia estocástica aplicada a la velocidad del viento. Bandas de confianza expresadas en magnitud
+                física (m/s).
+            </p>
+            <div class="kpi-grid">
+                <div class="kpi-card">
+                    <h4>Coeficiente de Determinación (R²)</h4>
+                    <div class="value viento" id="gpr-viento-score">--</div>
+                </div>
+                <div class="kpi-card">
+                    <h4>PRED GPR DÍA +1 (m/s)</h4>
+                    <div class="value viento" id="gpr-viento-pred">--</div>
+                </div>
+                <div class="kpi-card">
+                    <h4>PRED GPR DÍA +7 (m/s)</h4>
+                    <div class="value viento" id="gpr-viento-acc">--</div>
+                </div>
+            </div>
+            <div class="chart-container"><canvas id="chart-pred-gpr-viento"></canvas></div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Horizonte Temporal</th>
+                        <th>Predicción GPR (Viento m/s)</th>
+                        <th>Margen Error (±)</th>
+                        <th>Incertidumbre (%)</th>
+                    </tr>
+                </thead>
+                <tbody id="tabla-gpr-viento-body"></tbody>
+            </table>
+        </div>
+
+        <h2 class="section-title">8. Benchmarking Analítico: Comparativa de Modelos</h2>
+        <div class="card">
+            <p style="text-align: center; color: #4a5568; margin-bottom: 15px;">
+                Comparativa directa de las predicciones centrales para evaluar la divergencia de los algoritmos en el
+                horizonte de 7 días.
+            </p>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Día</th>
+                        <th>GHI (LSTM)</th>
+                        <th>GHI (GPR)</th>
+                        <th>Diferencia (%)</th>
+                        <th>Viento (LSTM)</th>
+                        <th>Viento (GPR)</th>
+                        <th>Diferencia (%)</th>
+                    </tr>
+                </thead>
+                <tbody id="tabla-comparativa-body"></tbody>
+            </table>
+        </div>
+
+        <h2 class="section-title">9. Consolidado Físico (Valores Reales Desnormalizados)</h2>
+        <div class="card">
+            <p style="text-align: center; color: #4a5568; margin-bottom: 15px;">
+                Proyección final de los modelos expresada en unidades de medida físicas.
+            </p>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Horizonte</th>
+                        <th>GHI (LSTM)</th>
+                        <th>GHI (GPR)</th>
+                        <th>Viento (LSTM)</th>
+                        <th>Viento (GPR)</th>
+                    </tr>
+                </thead>
+                <tbody id="tabla-consolidada-body"></tbody>
+            </table>
+        </div>
+        <h2 class="section-title">10. Estimación de Generación Energética (kWh/día)</h2>
+        <div class="card">
+            <p style="text-align: center; color: #4a5568; margin-bottom: 15px;">
+                Parámetros base: Planta solar de 100m² (η=18%, PR=0.75). Aerogenerador con rotor de 10m de radio
+                (Cp=0.35).
+            </p>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Día</th>
+                        <th>Energía Solar (LSTM)</th>
+                        <th>Energía Solar (GPR)</th>
+                        <th>Energía Eólica (LSTM)</th>
+                        <th>Energía Eólica (GPR)</th>
+                    </tr>
+                </thead>
+                <tbody id="tabla-energia-body"></tbody>
+            </table>
+        </div>
+        <!-- <div class="container">
+            <div class="btn-container">
+                <button class="btn-pdf" onclick="exportarPDF()">Descargar Reporte PDF</button>
+            </div>
+
+            <h1 style="text-align: center;">Evaluación del Modelo Predictivo: Red LSTM Dinámica y GPR</h1>
+
+            <h2 class="section-title">1. Optimización y Pérdida de la Arquitectura LSTM</h2>
+            <div class="card">...</div>
+
+            <div class="page-break"></div>
+
+            <h2 class="section-title">6. Regresión de Procesos Gaussianos (GPR) - Modelo Alterno GHI</h2>
+            <div class="card">...</div>
+
+            <div class="page-break"></div>
+
+            <h2 class="section-title">8. Benchmarking Analítico: Comparativa de Modelos</h2>
+            <div class="card">...</div>
+        </div> -->
+
+
+    </div>
+
+    <script>
+        const rawData = localStorage.getItem('lstm_data');
+        if (!rawData) {
+            document.body.innerHTML = "<h1 style='text-align:center; padding:50px;'>Error: No se detectaron datos. Ejecute el entrenamiento.</h1>";
+        } else {
+            const data = JSON.parse(rawData);
+
+            if (!data.pasado_reciente || !data.lstm || !data.lstm_viento || !data.gpr || !data.gpr_viento || !data.escalado) {
+                document.body.innerHTML = "<h1 style='text-align:center; padding:50px; color:red;'>Error de Estructura: Las claves del almacenamiento no corresponden al pipeline completo (LSTM + GPR + Escalado).</h1>";
+            } else {
+                const labels = ['Día -6', 'Día -5', 'Día -4', 'Día -3', 'Día -2', 'Día -1', 'Hoy', 'Día +1', 'Día +2', 'Día +3', 'Día +4', 'Día +5', 'Día +6', 'Día +7'];
+                const array_nulos = [null, null, null, null, null, null, null];
+
+                const historico = data.pasado_reciente.concat(array_nulos);
+                const anclaje = data.pasado_reciente[6];
+                const prefijo_pred = [null, null, null, null, null, null, anclaje];
+                const lstm_series_ghi = prefijo_pred.concat(data.lstm.forecast);
+
+                const historico_viento = data.lstm_viento.pasado_real.concat(array_nulos);
+                const anclaje_viento = data.lstm_viento.pasado_real[6];
+                const prefijo_pred_viento = [null, null, null, null, null, null, anclaje_viento];
+                const lstm_series_viento = prefijo_pred_viento.concat(data.lstm_viento.forecast_real);
+
+                const fillKPIs = (prefix, mse, d1, d7, unit = "") => {
+                    document.getElementById(`${prefix}-mse`).innerText = mse.toFixed(6);
+                    document.getElementById(`${prefix}-pred`).innerText = `${d1.toFixed(4)} ${unit}`.trim();
+                    document.getElementById(`${prefix}-acc`).innerText = `${d7.toFixed(4)} ${unit}`.trim();
+                };
+
+                fillKPIs('lstm', data.lstm.mse_train, data.lstm.forecast[0], data.lstm.forecast[6]);
+                fillKPIs('viento', data.lstm_viento.mse_train, data.lstm_viento.forecast_real[0], data.lstm_viento.forecast_real[6]);
+
+                // Gráficos LSTM
+                new Chart(document.getElementById('chart-loss-lstm'), {
+                    type: 'line',
+                    data: {
+                        labels: data.lstm.loss_history.map((_, i) => i + 1),
+                        datasets: [
+                            { label: 'Train Loss (GHI)', data: data.lstm.loss_history, borderColor: '#3182ce', backgroundColor: 'transparent', tension: 0.3 },
+                            { label: 'Val Loss (GHI)', data: data.lstm.val_loss_history, borderColor: '#e53e3e', backgroundColor: 'transparent', borderDash: [5, 5], tension: 0.3 }
+                        ]
+                    },
+                    options: { maintainAspectRatio: false }
+                });
+
+                new Chart(document.getElementById('chart-pred-lstm'), {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [
+                            { label: 'Histórico GHI (NASA)', data: historico, borderColor: '#2d3748', borderWidth: 3 },
+                            { label: 'Pronóstico LSTM GHI', data: lstm_series_ghi, borderColor: '#3182ce', borderDash: [5, 5] }
+                        ]
+                    },
+                    options: { maintainAspectRatio: false, spanGaps: true }
+                });
+
+                new Chart(document.getElementById('chart-loss-viento'), {
+                    type: 'line',
+                    data: {
+                        labels: data.lstm_viento.loss_history.map((_, i) => i + 1),
+                        datasets: [
+                            { label: 'Train Loss (Viento)', data: data.lstm_viento.loss_history, borderColor: '#38a169', backgroundColor: 'transparent', tension: 0.3 },
+                            { label: 'Val Loss (Viento)', data: data.lstm_viento.val_loss_history, borderColor: '#e53e3e', backgroundColor: 'transparent', borderDash: [5, 5], tension: 0.3 }
+                        ]
+                    },
+                    options: { maintainAspectRatio: false }
+                });
+
+                new Chart(document.getElementById('chart-pred-viento'), {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [
+                            { label: 'Histórico Viento (NASA)', data: historico_viento, borderColor: '#2d3748', borderWidth: 3 },
+                            { label: 'Predicción LSTM Viento', data: lstm_series_viento, borderColor: '#38a169', borderDash: [5, 5], fill: true, backgroundColor: 'rgba(56, 161, 105, 0.1)' }
+                        ]
+                    },
+                    options: { maintainAspectRatio: false, spanGaps: true }
+                });
+
+                // Tablas LSTM
+                document.getElementById('tabla-body').innerHTML = `
+                <tr><td>Radiación Solar (GHI)</td><td>${data.lstm.mse_train.toFixed(6)}</td><td>7 Días</td><td>Dense Multi-Output</td></tr>
+                <tr><td>Velocidad del Viento (WS10M)</td><td>${data.lstm_viento.mse_train.toFixed(6)}</td><td>7 Días</td><td>Dense Multi-Output</td></tr>
+            `;
+
+                let tablaDiariaHTML = '';
+                for (let i = 0; i < 7; i++) {
+                    tablaDiariaHTML += `<tr>
+                    <td style="font-weight: bold; background: #f7fafc;">Día +${i + 1}</td>
+                    <td style="color: #3182ce;">${data.lstm.forecast[i].toFixed(4)}</td>
+                    <td style="color: #718096;">&plusmn; ${data.lstm.uncertainty[i].toFixed(4)}</td>
+                    <td style="color: #805ad5;">${(data.lstm.uncertainty[i] * 100).toFixed(2)} %</td>
+                    <td style="color: #38a169;">${data.lstm_viento.forecast_real[i].toFixed(4)}</td>
+                    <td style="color: #718096;">&plusmn; ${data.lstm_viento.uncertainty_real[i].toFixed(4)}</td>
+                    <td style="color: #dd6b20;">${((data.lstm_viento.uncertainty_real[i] / data.lstm_viento.forecast_real[i]) * 100).toFixed(2)} %</td>
+                </tr>`;
+                }
+                document.getElementById('tabla-diaria-body').innerHTML = tablaDiariaHTML;
+
+                // Gráficos e Inyección GPR
+                document.getElementById('gpr-score').innerText = data.gpr.score.toFixed(4);
+                document.getElementById('gpr-pred').innerText = data.gpr.forecast[0].toFixed(4);
+                document.getElementById('gpr-acc').innerText = data.gpr.forecast[6].toFixed(4);
+
+                const gpr_upper = data.gpr.forecast.map((val, idx) => val + (1.96 * data.gpr.uncertainty[idx]));
+                const gpr_lower = data.gpr.forecast.map((val, idx) => val - (1.96 * data.gpr.uncertainty[idx]));
+
+                new Chart(document.getElementById('chart-pred-gpr'), {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [
+                            { label: 'Histórico GHI', data: historico, borderColor: '#2d3748' },
+                            { label: 'Pronóstico GPR', data: prefijo_pred.concat(data.gpr.forecast), borderColor: '#805ad5' },
+                            { label: 'Confianza (95%)', data: prefijo_pred.concat(gpr_upper), borderColor: 'transparent', backgroundColor: 'rgba(128, 90, 213, 0.1)', fill: '+1' },
+                            { label: '', data: prefijo_pred.concat(gpr_lower), borderColor: 'transparent', fill: false }
+                        ]
+                    },
+                    options: { maintainAspectRatio: false, spanGaps: true }
+                });
+
+                let tablaGprHTML = '';
+                for (let i = 0; i < 7; i++) {
+                    tablaGprHTML += `<tr>
+                    <td style="font-weight: bold;">Día +${i + 1}</td>
+                    <td style="color: #805ad5;">${data.gpr.forecast[i].toFixed(4)}</td>
+                    <td style="color: #718096;">&plusmn; ${data.gpr.uncertainty[i].toFixed(4)}</td>
+                    <td>${(data.gpr.uncertainty[i] * 100).toFixed(2)} %</td>
+                </tr>`;
+                }
+                document.getElementById('tabla-gpr-body').innerHTML = tablaGprHTML;
+
+                // GPR Viento
+                document.getElementById('gpr-viento-score').innerText = data.gpr_viento.score.toFixed(4);
+                document.getElementById('gpr-viento-pred').innerText = data.gpr_viento.forecast_real[0].toFixed(4);
+                document.getElementById('gpr-viento-acc').innerText = data.gpr_viento.forecast_real[6].toFixed(4);
+
+                const v_upper = data.gpr_viento.forecast_real.map((val, idx) => val + (1.96 * data.gpr_viento.uncertainty_real[idx]));
+                const v_lower = data.gpr_viento.forecast_real.map((val, idx) => val - (1.96 * data.gpr_viento.uncertainty_real[idx]));
+
+                new Chart(document.getElementById('chart-pred-gpr-viento'), {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [
+                            { label: 'Histórico Viento', data: historico_viento, borderColor: '#2d3748' },
+                            { label: 'Pronóstico GPR', data: prefijo_pred_viento.concat(data.gpr_viento.forecast_real), borderColor: '#38a169' },
+                            { label: 'Confianza (95%)', data: prefijo_pred_viento.concat(v_upper), borderColor: 'transparent', backgroundColor: 'rgba(56, 161, 105, 0.1)', fill: '+1' },
+                            { label: '', data: prefijo_pred_viento.concat(v_lower), borderColor: 'transparent', fill: false }
+                        ]
+                    },
+                    options: { maintainAspectRatio: false, spanGaps: true }
+                });
+
+                let tablaGprVientoHTML = '';
+                for (let i = 0; i < 7; i++) {
+                    tablaGprVientoHTML += `<tr>
+                    <td style="font-weight: bold;">Día +${i + 1}</td>
+                    <td style="color: #38a169;">${data.gpr_viento.forecast_real[i].toFixed(4)}</td>
+                    <td style="color: #718096;">&plusmn; ${data.gpr_viento.uncertainty_real[i].toFixed(4)}</td>
+                    <td>${((data.gpr_viento.uncertainty_real[i] / data.gpr_viento.forecast_real[i]) * 100).toFixed(2)} %</td>
+                </tr>`;
+                }
+                document.getElementById('tabla-gpr-viento-body').innerHTML = tablaGprVientoHTML;
+
+                // --- SECCIÓN 8: COMPARATIVA DE MODELOS ---
+                let tablaCompHTML = '';
+                for (let i = 0; i < 7; i++) {
+                    // Inversión del escalado Min-Max para GHI (LSTM) a escala física
+                    const ghi_lstm_real = (data.lstm.forecast[i] * data.escalado.range[0]) + data.escalado.min[0];
+
+                    // Cálculo de diferencia porcentual con valores homogéneos desnormalizados
+                    const diff_ghi = ((Math.abs(ghi_lstm_real - data.gpr.forecast[i]) / ((ghi_lstm_real + data.gpr.forecast[i]) / 2)) * 100).toFixed(2);
+                    const diff_viento = ((Math.abs(data.lstm_viento.forecast_real[i] - data.gpr_viento.forecast_real[i]) / ((data.lstm_viento.forecast_real[i] + data.gpr_viento.forecast_real[i]) / 2)) * 100).toFixed(2);
+
+                    tablaCompHTML += `
+                    <tr>
+                        <td style="font-weight: bold;">Día +${i + 1}</td>
+                        <td style="color: #3182ce;">${ghi_lstm_real.toFixed(4)}</td>
+                        <td style="color: #805ad5;">${data.gpr.forecast[i].toFixed(4)}</td>
+                        <td style="background: #fff5f5; font-weight: bold;">${diff_ghi} %</td>
+                        <td style="color: #38a169;">${data.lstm_viento.forecast_real[i].toFixed(4)}</td>
+                        <td style="color: #38a169; font-weight: bold;">${data.gpr_viento.forecast_real[i].toFixed(4)}</td>
+                        <td style="background: #f0fff4; font-weight: bold;">${diff_viento} %</td>
+                    </tr>
+                `;
+                }
+                document.getElementById('tabla-comparativa-body').innerHTML = tablaCompHTML;
+
+                // --- SECCIÓN 9: CONSOLIDADO FÍSICO (DESNORMALIZADO) ---
+                let tablaConsHTML = '';
+                for (let i = 0; i < 7; i++) {
+                    const ghi_lstm_real = (data.lstm.forecast[i] * data.escalado.range[0]) + data.escalado.min[0];
+                    const viento_lstm_real = (data.lstm_viento.forecast_norm[i] * data.escalado.range[3]) + data.escalado.min[3];
+
+                    const ghi_gpr_real = data.gpr.forecast[i];
+                    const viento_gpr_real = data.gpr_viento.forecast_real[i];
+
+                    tablaConsHTML += `<tr>
+                    <td style="font-weight: bold;">Día +${i + 1}</td>
+                    <td>${ghi_lstm_real.toFixed(4)}</td>
+                    <td>${ghi_gpr_real.toFixed(4)}</td>
+                    <td>${viento_lstm_real.toFixed(4)}</td>
+                    <td>${viento_gpr_real.toFixed(4)}</td>
+                </tr>`;
+                }
+                document.getElementById('tabla-consolidada-body').innerHTML = tablaConsHTML;
+
+                // --- SECCIÓN 10: ESTIMACIÓN ENERGÉTICA ---
+                const AREA_SOLAR = 100;
+                const EFICIENCIA_SOLAR = 0.18;
+                const PR_SOLAR = 0.75;
+
+                const RADIO_ROTOR = 10;
+                const AREA_BARRIDO = Math.PI * Math.pow(RADIO_ROTOR, 2);
+                const DENSIDAD_AIRE = 1.225;
+                const CP_AEROGENERADOR = 0.35;
+
+                let tablaEnergiaHTML = '';
+                for (let i = 0; i < 7; i++) {
+                    const ghi_lstm_real = (data.lstm.forecast[i] * data.escalado.range[0]) + data.escalado.min[0];
+                    const viento_lstm_real = (data.lstm_viento.forecast_norm[i] * data.escalado.range[3]) + data.escalado.min[3];
+                    const ghi_gpr_real = data.gpr.forecast[i];
+                    const viento_gpr_real = data.gpr_viento.forecast_real[i];
+
+                    const e_solar_lstm = ghi_lstm_real * AREA_SOLAR * EFICIENCIA_SOLAR * PR_SOLAR;
+                    const e_solar_gpr = ghi_gpr_real * AREA_SOLAR * EFICIENCIA_SOLAR * PR_SOLAR;
+
+                    const e_viento_lstm = (0.5 * DENSIDAD_AIRE * AREA_BARRIDO * Math.pow(viento_lstm_real, 3) * CP_AEROGENERADOR * 24) / 1000;
+                    const e_viento_gpr = (0.5 * DENSIDAD_AIRE * AREA_BARRIDO * Math.pow(viento_gpr_real, 3) * CP_AEROGENERADOR * 24) / 1000;
+
+                    tablaEnergiaHTML += `
+                    <tr>
+                        <td style="font-weight: bold;">Día +${i + 1}</td>
+                        <td style="color: #d69e2e;">${e_solar_lstm.toFixed(2)} kWh</td>
+                        <td style="color: #d69e2e;">${e_solar_gpr.toFixed(2)} kWh</td>
+                        <td style="color: #319795;">${e_viento_lstm.toFixed(2)} kWh</td>
+                        <td style="color: #319795;">${e_viento_gpr.toFixed(2)} kWh</td>
+                    </tr>
+                `;
+                }
+                document.getElementById('tabla-energia-body').innerHTML = tablaEnergiaHTML;
+                /* // Función para exportar a PDF
+                function exportarPDF() {
+                    const element = document.body;
+                    const opt = {
+                        margin: 0.5,
+                        filename: 'reporte_modelos_predictivos.pdf',
+                        image: { type: 'jpeg', quality: 0.98 },
+                        html2canvas: { scale: 2 },
+                        jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
+                    };
+                    html2pdf().set(opt).from(element).save();
+                };
+                // Ejecutar la compilación y descarga del PDF
+                html2pdf().set(opciones).from(elemento).save().then(() => {
+                    // Restaurar la visibilidad del botón en el dashboard web tras la descarga
+                    boton.style.display = 'block';
+                }); */
+            }
+
+        }
+    </script>
+</body>
+
+</html>
