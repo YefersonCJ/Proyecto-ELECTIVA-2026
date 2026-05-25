@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Proyecto de Aula: Pipeline ETL y LSTM</title>
+    <style>
+        body { font-family: system-ui, sans-serif; padding: 20px; background: #f4f7f6; color: #333; }
+        .box { background: #fff; border: 1px solid #cdd1d5; padding: 15px; margin-bottom: 20px; border-radius: 4px; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 10px; }
+        th, td { border: 1px solid #e1e4e8; padding: 8px; text-align: left; }
+        th { background: #f8f9fa; font-weight: 600; }
+        .controls { margin-bottom: 20px; background: #fff; padding: 15px; border: 1px solid #cdd1d5; border-radius: 4px; }
+        input { padding: 6px; margin-right: 10px; width: 100px; }
+        button { padding: 8px 16px; background: #0056b3; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 10px; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        .metric { font-family: monospace; font-size: 14px; background: #f8f9fa; padding: 10px; border-left: 4px solid #0056b3; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <h2>Proyecto de Aula: Pipeline de Datos Climáticos e Inferencia LSTM</h2>
+    
+    <div class="controls">
+        <label>Latitud: <input type="number" id="lat" value="4.71" step="0.01"></label>
+        <label>Longitud: <input type="number" id="lon" value="-74.07" step="0.01"></label>
+        <button id="btn-procesar" onclick="correrPipeline()">1. Ejecutar ETL (7000 Registros)</button>
+        <button id="btn-entrenar" onclick="entrenarIA()" disabled>2. Entrenar Modelo LSTM</button>
+    </div>
+
+    <div class="box">
+        <h3>1. Datos Crudos (Muestra Extracción NASA)</h3>
+        <div id="crudos"><p>Pendiente de ejecución.</p></div>
+    </div>
+    
+    <div class="box">
+        <h3>2. Datos ETL (Normalización Min-Max e Interpolación Lineal)</h3>
+        <div id="etl"><p>Pendiente de ejecución.</p></div>
+    </div>
+    
+    <div class="box">
+        <h3>3. Dataset Tensor y Resultados LSTM</h3>
+        <div id="final"><p>Pendiente de ejecución.</p></div>
+    </div>
+
+    <script>
+        async function correrPipeline() {
+            const lat = document.getElementById('lat').value; 
+            const lon = document.getElementById('lon').value;
+            const btnProcesar = document.getElementById('btn-procesar');
+            const btnEntrenar = document.getElementById('btn-entrenar');
+            const divCrudos = document.getElementById('crudos');
+            const divEtl = document.getElementById('etl');
+            const divFinal = document.getElementById('final');
+            
+            if (!lat || !lon) {
+                alert("Parámetros de coordenadas requeridos.");
+                return;
+            }
+
+            btnProcesar.disabled = true;
+            divFinal.innerHTML = "<div class='metric' style='border-color: orange;'>Inicializando extracción de serie temporal (20 años). Tiempo estimado: 15-30s.</div>";
+
+            try {
+                const url = `http://127.0.0.1:5000/procesar-completo?lat=${lat}&lon=${lon}`;
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                if (data.status === "success") {
+                    divCrudos.innerHTML = generarTabla(data.crudos);
+                    divEtl.innerHTML = generarTabla(data.etl);
+                    divFinal.innerHTML = `
+                        <div class="metric">
+                            <strong>Estructura del Dataset (Sliding Window: 30 días)</strong><br>
+                            Volumen total histórico procesado: ${data.dataset.total_registros}<br>
+                            Muestras generadas para red neuronal: ${data.dataset.total_secuencias}<br>
+                            Dimensiones del Tensor X: [${data.dataset.shape}]
+                        </div>`;
+                    btnEntrenar.disabled = false;
+                } else {
+                    divFinal.innerHTML = `<div class="metric" style="border-color: red;">Error en respuesta de API REST.</div>`;
+                }
+            } catch (e) {
+                divFinal.innerHTML = `<div class="metric" style="border-color: red;">Error de conexión. Servidor Flask inactivo o puerto 5000 bloqueado.</div>`;
+            } finally {
+                btnProcesar.disabled = false;
+            }
+        }
+
+        async function entrenarIA() {
+            const lat = document.getElementById('lat').value;
+            const lon = document.getElementById('lon').value;
+            const btnEntrenar = document.getElementById('btn-entrenar');
+            const divFinal = document.getElementById('final');
+            
+            btnEntrenar.disabled = true;
+            divFinal.innerHTML += "<div class='metric' style='border-color: orange;'>Ejecutando convergencia LSTM. Computando propagación hacia atrás. Tiempo estimado: 60-120s.</div>";
+
+            try {
+                const response = await fetch(`http://127.0.0.1:5000/entrenar-ia?lat=${lat}&lon=${lon}`);
+                const data = await response.json();
+                
+                if (data.status === "success") {
+                    divFinal.innerHTML = `
+                        <div class="metric" style="border-color: green;">
+                            <strong>Resultados de Entrenamiento LSTM</strong><br>
+                            Total muestras procesadas: ${data.muestras}<br>
+                            MSE (Loss): ${data.loss_final.toFixed(6)}<br>
+                            <br>
+                            <strong>Prueba de Inferencia (Día 31):</strong><br>
+                            Dato Observado (Normalizado): ${data.valor_real_ultimo.toFixed(4)}<br>
+                            Predicción Calculada: ${data.prediccion.toFixed(4)}<br>
+                            Desviación Absoluta: ${Math.abs(data.valor_real_ultimo - data.prediccion).toFixed(5)}
+                        </div>`;
+                }
+            } catch (e) {
+                divFinal.innerHTML += `<div class="metric" style="border-color: red;">Excepción durante la ejecución del grafo computacional en TensorFlow.</div>`;
+            } finally {
+                btnEntrenar.disabled = false;
+            }
+        }
+
+        function generarTabla(lista) {
+            if (!lista || lista.length === 0) return "<p>Estructura de datos vacía.</p>";
+            let html = '<table><thead><tr><th>Index (Fecha)</th><th>GHI (Radiación)</th><th>WS10M (Viento)</th><th>T2M (Temp)</th><th>RH2M (Humedad)</th></tr></thead><tbody>';
+            lista.forEach(f => {
+                html += `<tr>
+                    <td>${f.fecha}</td>
+                    <td>${parseFloat(f.GHI).toFixed(4)}</td>
+                    <td>${parseFloat(f.Viento).toFixed(4)}</td>
+                    <td>${parseFloat(f.Temp).toFixed(4)}</td>
+                    <td>${parseFloat(f.Humedad).toFixed(4)}</td>
+                </tr>`;
+            });
+            html += '</tbody></table>';
+            return html;
+        }
+    </script>
+</body>
+</html>
