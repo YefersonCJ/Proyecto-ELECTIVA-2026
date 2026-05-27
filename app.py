@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 from src.extraction import extraer_datos_nasa
 from src.processing import limpiar_y_normalizar, crear_secuencias
@@ -13,7 +13,7 @@ from sklearn.metrics import r2_score
 # Importaciones de la arquitectura de Inteligencia Artificial (CORRECCIÓN INTEGRADA)
 from src.model import construir_modelo_lstm
 from tensorflow.keras.callbacks import EarlyStopping
-from flask import Flask, request, jsonify, render_template
+
 
 app = Flask(__name__)
 CORS(app)
@@ -321,6 +321,8 @@ def ejecutar_eda():
     except Exception as e:
         import traceback
         return jsonify({"status": "error", "trace": traceback.format_exc()}), 500
+
+    app = Flask(__name__)
     @app.route('/', methods=['GET'])
     def index():
         return render_template('index.html')
@@ -328,5 +330,6 @@ def ejecutar_eda():
     @app.route('/resultados', methods=['GET'])
     def resultados():
         return render_template('resultados.html')
+
 if __name__ == '__main__':
     app.run(debug=True, host='127.0.0.1', port=5000, threaded=True)
