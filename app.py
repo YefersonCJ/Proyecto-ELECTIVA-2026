@@ -13,10 +13,21 @@ from sklearn.metrics import r2_score
 # Importaciones de la arquitectura de Inteligencia Artificial (CORRECCIÓN INTEGRADA)
 from src.model import construir_modelo_lstm
 from tensorflow.keras.callbacks import EarlyStopping
+from sklearn.preprocessing import MinMaxScaler
+from flask import render_template
 
 
 app = Flask(__name__)
 CORS(app)
+
+@app.route('/', methods=['GET'])
+def index():
+    return render_template('index.html')
+
+@app.route('/resultados.html')
+def mostrar_resultados():
+    return render_template('resultados.html')
+
 
 @app.route('/entrenar-ia', methods=['GET'])
 def entrenar_ia():
@@ -209,6 +220,7 @@ def procesar_completo():
         lat = request.args.get('lat', type=float)
         lon = request.args.get('lon', type=float)
         
+        # 1. Extracción
         df = extraer_datos_nasa(lat, lon, dias_atras=7200)
         
         df_crudos_muestra = df.head(5).fillna(0)
@@ -222,25 +234,37 @@ def procesar_completo():
                 "Humedad": float(row.get('RH2M', row.get('Humedad', 0)))
             })
             
+        # 2. Limpieza de Ruido
         df.replace(-999.0, np.nan, inplace=True)
         df.interpolate(method='linear', inplace=True)
         df.bfill(inplace=True)
         df.ffill(inplace=True)
         
+        # Mapeo de columnas para prevenir KeyError con nomenclaturas de NASA
+        mapeo_columnas = {'WS10M': 'Viento', 'T2M': 'Temp', 'RH2M': 'Humedad'}
+        df.rename(columns=mapeo_columnas, inplace=True)
+        
         columnas_objetivo = ['GHI', 'Temp', 'Humedad', 'Viento']
         df_limpio = df[columnas_objetivo].dropna()
         
-        df_etl_muestra = df_limpio.head(5)
+        # 3. NORMALIZACIÓN MATEMÁTICA (Min-Max)
+        scaler = MinMaxScaler()
+        matriz_escalada = scaler.fit_transform(df_limpio)
+        df_norm = pd.DataFrame(matriz_escalada, columns=df_limpio.columns, index=df_limpio.index)
+        
+        # 4. Empaquetado ETL
+        df_etl_muestra = df_norm.head(5)
         etl_list = []
         for idx, row in df_etl_muestra.iterrows():
             etl_list.append({
                 "fecha": idx.strftime('%Y-%m-%d') if hasattr(idx, 'strftime') else str(idx),
-                "GHI": float(row['GHI']),
-                "Viento": float(row['Viento']),
-                "Temp": float(row['Temp']),
-                "Humedad": float(row['Humedad'])
+                "GHI": float(row.get('GHI', 0)),
+                "Viento": float(row.get('Viento', 0)),
+                "Temp": float(row.get('Temp', 0)),
+                "Humedad": float(row.get('Humedad', 0))
             })
             
+        # 5. Dimensionamiento de Tensores LSTM
         lookback = 30
         total_registros = len(df_limpio)
         total_secuencias = total_registros - lookback if total_registros > lookback else 0
@@ -322,14 +346,7 @@ def ejecutar_eda():
         import traceback
         return jsonify({"status": "error", "trace": traceback.format_exc()}), 500
 
-    app = Flask(__name__)
-    @app.route('/', methods=['GET'])
-    def index():
-        return render_template('index.html')
-
-    @app.route('/resultados', methods=['GET'])
-    def resultados():
-        return render_template('resultados.html')
+    
 
 if __name__ == '__main__':
     app.run(debug=True, host='127.0.0.1', port=5000, threaded=True)
